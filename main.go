@@ -1,12 +1,12 @@
 package main
 
 import (
-    "fmt"
-    "log"
-    "os"
+	"fmt"
+	"log"
+	"os"
 
-    "ekrp/config"
-    "ekrp/routes"
+	"ekrp/config"
+	"ekrp/routes"
 )
 
 func main() {
