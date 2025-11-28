@@ -10,8 +10,9 @@ import (
 )
 
 type Claims struct {
-	UserID string `json:"user_id"`
-	RoleID string `json:"role_id"`
+	UserID      string   `json:"user_id"`
+	RoleID      string   `json:"role_id"`
+	Permissions []string `json:"permissions"`
 	jwt.RegisteredClaims
 }
 
@@ -26,7 +27,6 @@ func jwtSecret() ([]byte, error) {
 func jwtExpiry() (time.Duration, error) {
 	s := os.Getenv("JWT_EXPIRE_MIN")
 	if s == "" {
-		// default 24 hours
 		return time.Hour * 24, nil
 	}
 	mins, err := strconv.Atoi(s)
@@ -36,19 +36,21 @@ func jwtExpiry() (time.Duration, error) {
 	return time.Duration(mins) * time.Minute, nil
 }
 
-func GenerateToken(userID, roleID string) (string, error) {
+func GenerateTokenWithPermissions(userID, roleID string, permissions []string) (string, error) {
 	secret, err := jwtSecret()
 	if err != nil {
 		return "", err
 	}
+
 	exp, err := jwtExpiry()
 	if err != nil {
 		return "", err
 	}
 
 	claims := Claims{
-		UserID: userID,
-		RoleID: roleID,
+		UserID:      userID,
+		RoleID:      roleID,
+		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(exp)),
@@ -65,9 +67,16 @@ func ValidateToken(tokenStr string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		return secret, nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
+
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&Claims{},
+		func(t *jwt.Token) (interface{}, error) {
+			return secret, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
+	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -75,5 +84,6 @@ func ValidateToken(tokenStr string) (*Claims, error) {
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return claims, nil
 	}
+
 	return nil, errors.New("invalid token")
 }

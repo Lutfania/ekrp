@@ -13,5 +13,6 @@ type LoginResponse struct {
 	FullName string `json:"full_name"`
 	RoleID   string `json:"role_id"`
 	Token    string `json:"token"`
+	Permissions []string `json:"permissions"`
 }
 

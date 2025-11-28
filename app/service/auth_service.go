@@ -8,38 +8,51 @@ import (
 )
 
 type AuthService struct {
-	UserRepo *repository.UserRepository
+	UserRepo       *repository.UserRepository
+	PermissionRepo *repository.PermissionRepository
 }
 
-func NewAuthService(repo *repository.UserRepository) *AuthService {
-	return &AuthService{UserRepo: repo}
+func NewAuthService(userRepo *repository.UserRepository) *AuthService {
+	return &AuthService{
+		UserRepo:       userRepo,
+		PermissionRepo: repository.NewPermissionRepository(),
+	}
 }
 
 func (s *AuthService) Login(req models.LoginRequest) (*models.LoginResponse, error) {
+	// ambil user dari email
 	user, err := s.UserRepo.FindByEmail(req.Email)
 	if err != nil {
-		// raw DB "no rows" -> ubah pesan (biar tidak bocor)
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	// compare using utils
+	// cek password
 	if err := utils.CheckPassword(user.PasswordHash, req.Password); err != nil {
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	// generate jwt token
-	token, err := utils.GenerateToken(user.ID, user.RoleID)
+	// 🔥 ambil permissions berdasarkan role
+	perms, err := s.PermissionRepo.GetPermissionsByRole(user.RoleID)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &models.LoginResponse{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-		FullName: user.FullName,
-		RoleID:   user.RoleID,
-		Token:    token,
+	// 🔥 generate token lengkap dgn permissions
+	token, err := utils.GenerateTokenWithPermissions(user.ID, user.RoleID, perms)
+	if err != nil {
+		return nil, err
 	}
+
+	// response sesuai modul
+	res := &models.LoginResponse{
+		ID:         user.ID,
+		Username:   user.Username,
+		Email:      user.Email,
+		FullName:   user.FullName,
+		RoleID:     user.RoleID,
+		Token:      token,
+		Permissions: perms,
+	}
+
 	return res, nil
 }

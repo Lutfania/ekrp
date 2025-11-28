@@ -1,38 +1,45 @@
 package routes
 
 import (
+    "ekrp/middleware"      
     "ekrp/app/service"
     "github.com/gofiber/fiber/v2"
 )
 
 func UserRoutes(app *fiber.App) {
+
     userService := service.NewUserService()
 
-    app.Post("/users", func(c *fiber.Ctx) error {
-        var body struct {
-            Username string `json:"username"`
-            Email    string `json:"email"`
-            Password string `json:"password"`
-            FullName string `json:"full_name"`
-            RoleID   string `json:"role_id"`
-        }
+    app.Post("/users",
+        middleware.JWTAuth,
+        middleware.RequirePermission("user:manage"),
+        func(c *fiber.Ctx) error {
 
-        if err := c.BodyParser(&body); err != nil {
-            return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
-        }
+            var body struct {
+                Username string `json:"username"`
+                Email    string `json:"email"`
+                Password string `json:"password"`
+                FullName string `json:"full_name"`
+                RoleID   string `json:"role_id"`
+            }
 
-        err := userService.CreateUser(
-            body.Username,
-            body.Email,
-            body.Password,
-            body.FullName,
-            body.RoleID,
-        )
+            if err := c.BodyParser(&body); err != nil {
+                return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
+            }
 
-        if err != nil {
-            return c.Status(500).JSON(fiber.Map{"error": err.Error()})
-        }
+            err := userService.CreateUser(
+                body.Username,
+                body.Email,
+                body.Password,
+                body.FullName,
+                body.RoleID,
+            )
 
-        return c.JSON(fiber.Map{"message": "User created successfully"})
-    })
+            if err != nil {
+                return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+            }
+
+            return c.JSON(fiber.Map{"message": "User created successfully"})
+        },
+    )
 }
