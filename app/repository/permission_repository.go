@@ -25,12 +25,12 @@ func (r *PermissionRepository) GetPermissionsByRole(roleID string) ([]string, er
 	}
 	defer rows.Close()
 
-	var permissions []string
+	perms := []string{}
 	for rows.Next() {
 		var name string
 		rows.Scan(&name)
-		permissions = append(permissions, name)
+		perms = append(perms, name)
 	}
 
-	return permissions, nil
+	return perms, nil
 }
