@@ -10,10 +10,14 @@ import (
 
 func RegisterRoutes(app *fiber.App) {
 
-	// Repository
+	// existing repos/services
 	userRepo := repository.NewUserRepository()
 
-	// Services
+	// student repo & service (pastikan file repository/service ada)
+	studentRepo := repository.NewStudentRepository()
+	studentService := service.NewStudentService(studentRepo)
+
+	// existing auth/user services (sesuaikan kalau kamu buat NewAuthService / NewUserService differently)
 	authService := service.NewAuthService(userRepo)
 	userService := service.NewUserService(userRepo)
 
@@ -26,11 +30,18 @@ func RegisterRoutes(app *fiber.App) {
 
 	// USERS
 	users := app.Group("/api/v1/users", middleware.JWTAuth)
-
 	users.Get("/", userService.FindAll)
 	users.Get("/:id", userService.FindById)
 	users.Post("/", userService.CreateUser)
 	users.Put("/:id", userService.UpdateUser)
 	users.Delete("/:id", userService.DeleteUser)
 	users.Put("/:id/role", userService.UpdateUserRole)
+
+	// STUDENTS
+	students := app.Group("/api/v1/students", middleware.JWTAuth)
+	students.Get("/", studentService.FindAll)
+	students.Get("/:id", studentService.FindById)
+	students.Post("/", studentService.Create)
+	students.Put("/:id/advisor", studentService.UpdateAdvisor)
+	students.Get("/:id/achievements", studentService.FindAchievements)
 }
