@@ -4,14 +4,14 @@ import "golang.org/x/crypto/bcrypt"
 
 // HashPassword meng-hash password plaintext
 func HashPassword(password string) (string, error) {
-    bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-    if err != nil {
-        return "", err
-    }
-    return string(bytes), nil
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
 }
 
 // CheckPassword membandingkan hash dengan password plaintext
 func CheckPassword(hash, password string) error {
-    return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }

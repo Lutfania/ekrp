@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"ekrp/config"
-	"ekrp/routes"
+	"github.com/Lutfania/ekrp/config"
+	"github.com/Lutfania/ekrp/routes"
 )
 
 func main() {

@@ -1,25 +1,25 @@
 package routes
 
 import (
-	"ekrp/app/repository"
-	"ekrp/app/service"
-	"ekrp/middleware"
+	"github.com/Lutfania/ekrp/app/repository"
+	"github.com/Lutfania/ekrp/app/service"
+	"github.com/Lutfania/ekrp/middleware"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 func RegisterRoutes(app *fiber.App) {
 
-	// existing repos/services
+	// Repositories
 	userRepo := repository.NewUserRepository()
-
-	// student repo & service (pastikan file repository/service ada)
 	studentRepo := repository.NewStudentRepository()
-	studentService := service.NewStudentService(studentRepo)
+	lecturerRepo := repository.NewLecturerRepository()
 
-	// existing auth/user services (sesuaikan kalau kamu buat NewAuthService / NewUserService differently)
+	// Services
 	authService := service.NewAuthService(userRepo)
 	userService := service.NewUserService(userRepo)
+	studentService := service.NewStudentService(studentRepo)
+	lecturerService := service.NewLecturerService(lecturerRepo)
 
 	// AUTH
 	auth := app.Group("/api/v1/auth")
@@ -44,4 +44,11 @@ func RegisterRoutes(app *fiber.App) {
 	students.Post("/", studentService.Create)
 	students.Put("/:id/advisor", studentService.UpdateAdvisor)
 	students.Get("/:id/achievements", studentService.FindAchievements)
+
+	// LECTURERS
+	lecturers := app.Group("/api/v1/lecturers", middleware.JWTAuth)
+	lecturers.Get("/", lecturerService.FindAll)
+	lecturers.Get("/:id", lecturerService.FindById)
+	lecturers.Post("/", lecturerService.Create)
+	lecturers.Get("/:id/advisees", lecturerService.FindAdvisees)
 }

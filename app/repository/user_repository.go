@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"ekrp/app/models"
-	"ekrp/config"
+	"github.com/Lutfania/ekrp/app/models"
+	"github.com/Lutfania/ekrp/config"
 )
 
 type UserRepository struct{}
@@ -86,8 +86,6 @@ func (r *UserRepository) GetRolePermissions(roleID string) ([]string, error) {
 
 	return permissions, nil
 }
-
-
 
 func (r *UserRepository) UpdateUser(id string, req *models.UpdateUserRequest) error {
 	_, err := config.DB.Exec(context.Background(),

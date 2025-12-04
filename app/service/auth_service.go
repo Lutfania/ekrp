@@ -1,9 +1,9 @@
 package service
 
 import (
-	"ekrp/app/models"
-	"ekrp/app/repository"
-	"ekrp/utils"
+	"github.com/Lutfania/ekrp/app/models"
+	"github.com/Lutfania/ekrp/app/repository"
+	"github.com/Lutfania/ekrp/utils"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 )

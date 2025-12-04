@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"ekrp/config"
+	"github.com/Lutfania/ekrp/config"
 )
 
 type PermissionRepository struct{}

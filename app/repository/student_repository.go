@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"ekrp/app/models"
-	"ekrp/config"
+	"github.com/Lutfania/ekrp/app/models"
+	"github.com/Lutfania/ekrp/config"
 )
 
 type StudentRepository struct{}

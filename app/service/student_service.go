@@ -1,8 +1,8 @@
 package service
 
 import (
-	"ekrp/app/models"
-	"ekrp/app/repository"
+	"github.com/Lutfania/ekrp/app/models"
+	"github.com/Lutfania/ekrp/app/repository"
 
 	"github.com/gofiber/fiber/v2"
 )

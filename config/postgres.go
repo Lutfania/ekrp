@@ -2,9 +2,9 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 )

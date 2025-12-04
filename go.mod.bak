@@ -1,4 +1,4 @@
-module github.com/Lutfania/ekrp
+﻿module github.com/Lutfania/ekrp
 
 go 1.25.0
 

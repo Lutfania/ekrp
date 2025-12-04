@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"ekrp/utils"
+	"github.com/Lutfania/ekrp/utils"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
