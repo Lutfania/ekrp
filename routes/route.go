@@ -9,14 +9,17 @@ import (
 )
 
 func RegisterRoutes(app *fiber.App) {
+	
 
 	// Repositories
 	userRepo := repository.NewUserRepository()
+	achRepo := repository.NewAchievementRepository()
 	studentRepo := repository.NewStudentRepository()
 	lecturerRepo := repository.NewLecturerRepository()
 
 	// Services
 	authService := service.NewAuthService(userRepo)
+	achService := service.NewAchievementService(achRepo)
 	userService := service.NewUserService(userRepo)
 	studentService := service.NewStudentService(studentRepo)
 	lecturerService := service.NewLecturerService(lecturerRepo)
@@ -36,6 +39,20 @@ func RegisterRoutes(app *fiber.App) {
 	users.Put("/:id", userService.UpdateUser)
 	users.Delete("/:id", userService.DeleteUser)
 	users.Put("/:id/role", userService.UpdateUserRole)
+
+	
+ach := app.Group("/api/v1/achievements", middleware.JWTAuth)
+
+ach.Get("/", achService.List)
+ach.Get("/:id", achService.GetByID)
+ach.Post("/", achService.Create)
+ach.Put("/:id", achService.Update)
+ach.Delete("/:id", achService.Delete)
+
+ach.Post("/:id/submit", achService.Submit)
+ach.Post("/:id/verify", achService.Verify)
+ach.Post("/:id/reject", achService.Reject)
+ach.Get("/:id/history", achService.History)
 
 	// STUDENTS
 	students := app.Group("/api/v1/students", middleware.JWTAuth)
