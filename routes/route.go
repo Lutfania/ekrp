@@ -9,17 +9,18 @@ import (
 )
 
 func RegisterRoutes(app *fiber.App) {
-	
 
 	// Repositories
 	userRepo := repository.NewUserRepository()
 	achRepo := repository.NewAchievementRepository()
+		mongoRepo := repository.NewMongoAchievementRepository()
+
 	studentRepo := repository.NewStudentRepository()
 	lecturerRepo := repository.NewLecturerRepository()
 
 	// Services
 	authService := service.NewAuthService(userRepo)
-	achService := service.NewAchievementService(achRepo)
+	achService := service.NewAchievementService(achRepo, mongoRepo) // <-- perhatikan kedua repo
 	userService := service.NewUserService(userRepo)
 	studentService := service.NewStudentService(studentRepo)
 	lecturerService := service.NewLecturerService(lecturerRepo)
@@ -40,19 +41,18 @@ func RegisterRoutes(app *fiber.App) {
 	users.Delete("/:id", userService.DeleteUser)
 	users.Put("/:id/role", userService.UpdateUserRole)
 
-	
-ach := app.Group("/api/v1/achievements", middleware.JWTAuth)
+	ach := app.Group("/api/v1/achievements", middleware.JWTAuth)
 
-ach.Get("/", achService.List)
-ach.Get("/:id", achService.GetByID)
-ach.Post("/", achService.Create)
-ach.Put("/:id", achService.Update)
-ach.Delete("/:id", achService.Delete)
-
-ach.Post("/:id/submit", achService.Submit)
-ach.Post("/:id/verify", achService.Verify)
-ach.Post("/:id/reject", achService.Reject)
-ach.Get("/:id/history", achService.History)
+	ach.Get("/", achService.List) // ?student_id=
+	ach.Get("/:id", achService.GetByID)
+	ach.Post("/", achService.Create)
+	ach.Put("/:id", achService.Update)
+	ach.Delete("/:id", achService.Delete)
+	ach.Post("/:id/submit", achService.Submit)
+	ach.Post("/:id/verify", achService.Verify)
+	ach.Post("/:id/reject", achService.Reject)
+	ach.Get("/:id/history", achService.History)
+	ach.Post("/:id/attachments", achService.UploadAttachment)
 
 	// STUDENTS
 	students := app.Group("/api/v1/students", middleware.JWTAuth)

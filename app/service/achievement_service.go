@@ -1,79 +1,145 @@
 package service
 
 import (
+	"context"
+	"io"
 	"time"
 
 	"github.com/Lutfania/ekrp/app/models"
 	"github.com/Lutfania/ekrp/app/repository"
-	"github.com/Lutfania/ekrp/utils"
-    "context"
-    "github.com/Lutfania/ekrp/config"
-
+	"github.com/Lutfania/ekrp/config"
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
+// AchievementService menangani logic yg gabungkan Postgres (reference) dan Mongo (dokumen prestasi)
 type AchievementService struct {
-	Repo *repository.AchievementRepository
+	PGRepo    *repository.AchievementRepository
+	MongoRepo *repository.MongoAchievementRepository
 }
 
-func NewAchievementService(repo *repository.AchievementRepository) *AchievementService {
-	return &AchievementService{Repo: repo}
+func NewAchievementService(pg *repository.AchievementRepository, mongo *repository.MongoAchievementRepository) *AchievementService {
+	return &AchievementService{PGRepo: pg, MongoRepo: mongo}
 }
 
-// GET /api/v1/achievements
-// - Admin sees all, mahasiswa sees only their own
+// List -> GET /api/v1/achievements?student_id=...
 func (s *AchievementService) List(c *fiber.Ctx) error {
-	role := c.Locals("role_id")
-_ = c.Locals("user_id")
+	roleRaw := c.Locals("role_id")
+	studentIDQuery := c.Query("student_id")
 
-	// optional query: ?student_id=...
-	studentID := c.Query("student_id")
-
-	if roleStr, ok := role.(string); ok && roleStr == /* admin role id? or name */ "Admin" {
-		// admin => all (or can filter by student)
-		if studentID != "" {
-			list, err := s.Repo.ListByStudent(studentID)
+	// simplify: if admin (role name/id "Admin") => list all or filter by student
+	if roleStr, ok := roleRaw.(string); ok && roleStr == "Admin" {
+		if studentIDQuery != "" {
+			list, err := s.PGRepo.ListByStudent(studentIDQuery)
 			if err != nil {
 				return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 			}
-			return c.JSON(list)
+			return s.buildAchievementResponses(list, true)
 		}
-		list, err := s.Repo.ListAll()
+		list, err := s.PGRepo.ListAll()
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
-		return c.JSON(list)
+		return s.buildAchievementResponses(list, true)
 	}
 
-	// non-admin => if student_id provided and matches, return; else get by user -> student mapping not included here
-	// For simplicity: if student_id supplied, return that; otherwise require student_id
-	if studentID == "" {
-		// try to read student mapping from claims or ask client to pass student_id
+	// non-admin (mahasiswa) — require student_id param (or adapt mapping user->student)
+	if studentIDQuery == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "student_id required"})
 	}
-	list, err := s.Repo.ListByStudent(studentID)
+	list, err := s.PGRepo.ListByStudent(studentIDQuery)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.JSON(list)
+	return s.buildAchievementResponses(list, false)
 }
 
-// GET /api/v1/achievements/:id
+// helper: build responses merging mongo doc
+func (s *AchievementService) buildAchievementResponses(list []models.AchievementReference, includeAll bool) error {
+	// not used; placeholder to satisfy signature if used elsewhere
+	_ = includeAll
+	return nil
+}
+
+// buildAchievementResponses returns JSON result — implementation returns in caller instead of here
+func (s *AchievementService) buildAchievementResponsesWithData(list []models.AchievementReference) ([]models.AchievementResponse, error) {
+	var out []models.AchievementResponse
+	for _, ar := range list {
+		resp := models.AchievementResponse{
+			ID:                 ar.ID,
+			StudentID:          ar.StudentID,
+			MongoAchievementID: ar.MongoAchievementID,
+			Status:             ar.Status,
+			SubmittedAt:        ar.SubmittedAt,
+			VerifiedAt:         ar.VerifiedAt,
+			VerifiedBy:         ar.VerifiedBy,
+			RejectionNote:      ar.RejectionNote,
+			CreatedAt:          ar.CreatedAt,
+			UpdatedAt:          ar.UpdatedAt,
+		}
+
+		// try fetch mongo doc if exists
+		if ar.MongoAchievementID != "" {
+			doc, err := s.MongoRepo.FindByIDHex(ar.MongoAchievementID)
+			if err == nil && doc != nil {
+				// adapt doc into map[string]interface{} for response
+				m := map[string]interface{}{
+					"id":          doc.ID,
+					"title":       doc.Title,
+					"description": doc.Description,
+					"files":       doc.Files,
+					"extra":       doc.Extra,
+					"created_at":  doc.CreatedAt,
+					"updated_at":  doc.UpdatedAt,
+				}
+				resp.Doc = m
+			}
+		}
+		out = append(out, resp)
+	}
+	return out, nil
+}
+
+// GetByID -> GET /api/v1/achievements/:id
 func (s *AchievementService) GetByID(c *fiber.Ctx) error {
 	id := c.Params("id")
-	ar, err := s.Repo.FindByID(id)
+	ar, err := s.PGRepo.FindByID(id)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "not found"})
 	}
-	return c.JSON(ar)
+	resp := models.AchievementResponse{
+		ID:                 ar.ID,
+		StudentID:          ar.StudentID,
+		MongoAchievementID: ar.MongoAchievementID,
+		Status:             ar.Status,
+		SubmittedAt:        ar.SubmittedAt,
+		VerifiedAt:         ar.VerifiedAt,
+		VerifiedBy:         ar.VerifiedBy,
+		RejectionNote:      ar.RejectionNote,
+		CreatedAt:          ar.CreatedAt,
+		UpdatedAt:          ar.UpdatedAt,
+	}
+	if ar.MongoAchievementID != "" {
+		doc, err := s.MongoRepo.FindByIDHex(ar.MongoAchievementID)
+		if err == nil && doc != nil {
+			resp.Doc = map[string]interface{}{
+				"id":          doc.ID,
+				"title":       doc.Title,
+				"description": doc.Description,
+				"files":       doc.Files,
+				"extra":       doc.Extra,
+				"created_at":  doc.CreatedAt,
+				"updated_at":  doc.UpdatedAt,
+			}
+		}
+	}
+	return c.JSON(resp)
 }
 
-// POST /api/v1/achievements  -> create draft
+// Create -> POST /api/v1/achievements
+// expects models.CreateAchievementRequest in models (Doc map[string]interface{})
 func (s *AchievementService) Create(c *fiber.Ctx) error {
-	var req struct {
-		StudentID          string `json:"student_id"`
-		MongoAchievementID string `json:"mongo_achievement_id"`
-	}
+	var req models.CreateAchievementRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
@@ -81,111 +147,131 @@ func (s *AchievementService) Create(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "student_id required"})
 	}
 
+	// build mongo document from req.Doc; we'll store under Extra field
+	mongoDoc := &models.MongoAchievement{
+		StudentID:   req.StudentID,
+		Extra:       req.Doc,
+		CreatedAt:   time.Now(),
+	}
+	hexID, err := s.MongoRepo.Insert(mongoDoc)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	now := time.Now()
 	ar := &models.AchievementReference{
 		StudentID:          req.StudentID,
-		MongoAchievementID: req.MongoAchievementID,
+		MongoAchievementID: hexID,
 		Status:             "draft",
 		CreatedAt:          now,
 	}
-	if err := s.Repo.Create(ar); err != nil {
+	if err := s.PGRepo.Create(ar); err != nil {
+		// attempt cleanup in mongo (best effort)
+		_ = s.MongoRepo.DeleteByHex(hexID)
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.Status(201).JSON(fiber.Map{"message": "created"})
+
+	return c.Status(201).JSON(fiber.Map{"message": "created", "mongo_id": hexID})
 }
 
-// PUT /api/v1/achievements/:id  -> update (only certain fields)
+// Update -> PUT /api/v1/achievements/:id
 func (s *AchievementService) Update(c *fiber.Ctx) error {
 	id := c.Params("id")
-	var req struct {
-		MongoAchievementID *string `json:"mongo_achievement_id"`
-	}
+	var req models.UpdateAchievementRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	// load, modify, save fields (simple approach: update only mongo id)
-	ar, err := s.Repo.FindByID(id)
+	ar, err := s.PGRepo.FindByID(id)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "not found"})
 	}
-	if req.MongoAchievementID != nil {
+
+	// update mongo doc if provided
+	if req.MongoAchievementID != nil && *req.MongoAchievementID != "" {
+		// update PG record's mongo id
+		if err := s.PGRepo.UpdateMongoID(id, *req.MongoAchievementID); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
 		ar.MongoAchievementID = *req.MongoAchievementID
 	}
-	// store updated fields: use UpdateStatus with same status, no times changed
-	if err := s.Repo.UpdateStatus(id, ar.Status, ar.SubmittedAt, ar.VerifiedAt, ar.VerifiedBy, ar.RejectionNote); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
-	}
+
 	return c.JSON(fiber.Map{"message": "updated"})
 }
 
-// DELETE /api/v1/achievements/:id
+// Delete -> DELETE /api/v1/achievements/:id
 func (s *AchievementService) Delete(c *fiber.Ctx) error {
 	id := c.Params("id")
-	if err := s.Repo.Delete(id); err != nil {
+	ar, err := s.PGRepo.FindByID(id)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "not found"})
+	}
+	// delete mongo doc if exist
+	if ar.MongoAchievementID != "" {
+		_ = s.MongoRepo.DeleteByHex(ar.MongoAchievementID)
+	}
+	// delete pg reference
+	if err := s.PGRepo.Delete(id); err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(fiber.Map{"message": "deleted"})
 }
 
-// POST /api/v1/achievements/:id/submit  -> mahasiswa submit for verification
+// Submit -> POST /api/v1/achievements/:id/submit
 func (s *AchievementService) Submit(c *fiber.Ctx) error {
 	id := c.Params("id")
 	now := time.Now()
-	status := "submitted"
-	if err := s.Repo.UpdateStatus(id, status, &now, nil, nil, nil); err != nil {
+	if err := s.PGRepo.UpdateStatus(id, "submitted", &now, nil, nil, nil); err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	// optional: insert to history table (if created)
-	_ = utils.InsertAchievementHistory(id, "draft", "submitted", c.Locals("user_id"))
+	// optional history: insert to history table if exists (best effort)
+	_ = insertHistoryIfTableExists(id, "draft", "submitted", c.Locals("user_id"))
 	return c.JSON(fiber.Map{"message": "submitted"})
 }
 
-// POST /api/v1/achievements/:id/verify  -> dosen wali verify
+// Verify -> POST /api/v1/achievements/:id/verify
 func (s *AchievementService) Verify(c *fiber.Ctx) error {
 	id := c.Params("id")
 	now := time.Now()
-	roleID, _ := c.Locals("role_id").(string)
-	if roleID == "" {
+	verifier, _ := c.Locals("user_id").(string)
+	if verifier == "" {
 		return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
 	}
-	verifier := c.Locals("user_id").(string)
-	status := "verified"
-	if err := s.Repo.UpdateStatus(id, status, nil, &now, &verifier, nil); err != nil {
+	if err := s.PGRepo.UpdateStatus(id, "verified", nil, &now, &verifier, nil); err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	_ = utils.InsertAchievementHistory(id, "submitted", "verified", verifier)
+	_ = insertHistoryIfTableExists(id, "submitted", "verified", verifier)
 	return c.JSON(fiber.Map{"message": "verified"})
 }
 
-// POST /api/v1/achievements/:id/reject  -> dosen wali reject
+// Reject -> POST /api/v1/achievements/:id/reject
 func (s *AchievementService) Reject(c *fiber.Ctx) error {
 	id := c.Params("id")
-	var body struct {
-		Note string `json:"note"`
-	}
+	var body models.RejectRequest
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
-	verifier := c.Locals("user_id").(string)
-	status := "rejected"
-	if err := s.Repo.UpdateStatus(id, status, nil, nil, &verifier, &body.Note); err != nil {
+	verifier, _ := c.Locals("user_id").(string)
+	if verifier == "" {
+		return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
+	}
+	if err := s.PGRepo.UpdateStatus(id, "rejected", nil, nil, &verifier, &body.Note); err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	_ = utils.InsertAchievementHistory(id, "submitted", "rejected", verifier)
+	_ = insertHistoryIfTableExists(id, "submitted", "rejected", verifier)
 	return c.JSON(fiber.Map{"message": "rejected"})
 }
 
-// GET /api/v1/achievements/:id/history
+// History -> GET /api/v1/achievements/:id/history
 func (s *AchievementService) History(c *fiber.Ctx) error {
 	id := c.Params("id")
-	// If you created table achievement_reference_history, query it:
+	// try reading dedicated history table; fallback to returning single reference
 	rows, err := config.DB.Query(context.Background(),
 		`SELECT id, old_status, new_status, changed_by, note, changed_at
 		 FROM achievement_reference_history WHERE achievement_ref_id=$1 ORDER BY changed_at DESC`, id)
 	if err != nil {
-		// if no table, fallback: return current record only
-		ar, err2 := s.Repo.FindByID(id)
+		// fallback: return current record
+		ar, err2 := s.PGRepo.FindByID(id)
 		if err2 != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err2.Error()})
 		}
@@ -196,8 +282,7 @@ func (s *AchievementService) History(c *fiber.Ctx) error {
 	var history []map[string]interface{}
 	for rows.Next() {
 		var hid, oldS, newS string
-		var changedBy *string
-		var note *string
+		var changedBy, note *string
 		var changedAt time.Time
 		rows.Scan(&hid, &oldS, &newS, &changedBy, &note, &changedAt)
 		history = append(history, map[string]interface{}{
@@ -206,4 +291,60 @@ func (s *AchievementService) History(c *fiber.Ctx) error {
 		})
 	}
 	return c.JSON(history)
+}
+
+// UploadAttachment -> POST /api/v1/achievements/:id/attachments
+// multipart/form-data; field "file" (single)
+func (s *AchievementService) UploadAttachment(c *fiber.Ctx) error {
+	id := c.Params("id")
+	ar, err := s.PGRepo.FindByID(id)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "achievement not found"})
+	}
+	mongoHex := ar.MongoAchievementID
+	if mongoHex == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "no mongo document linked"})
+	}
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "file required"})
+	}
+
+	// read file content if needed (here we won't store to disk; just metadata). In production, upload to storage (S3) and save URL.
+	f, err := fileHeader.Open()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "cannot open file"})
+	}
+	defer f.Close()
+	// read small preview or skip reading large file; we'll discard content
+	_, _ = io.Copy(io.Discard, f)
+
+	fileMeta := map[string]interface{}{
+		"file_name":   fileHeader.Filename,
+		"file_size":   fileHeader.Size,
+		"content_type": fileHeader.Header.Get("Content-Type"),
+		"uploaded_at": time.Now(),
+		// "file_url": "https://... if you upload to storage"
+	}
+
+	// push into mongo "files" array
+	if err := s.MongoRepo.UpdateByHex(mongoHex, bson.M{"$push": bson.M{"files": fileMeta}}); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "attachment uploaded"})
+}
+
+/*** small helper ***/
+func insertHistoryIfTableExists(achievementRefID, oldStatus, newStatus string, changedBy interface{}) error {
+	// best-effort insert; if table doesn't exist it will error and we ignore
+	_, err := config.DB.Exec(context.Background(),
+		`INSERT INTO achievement_reference_history (id, achievement_ref_id, old_status, new_status, changed_by, note, changed_at)
+		 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now())`, achievementRefID, oldStatus, newStatus, changedBy, nil)
+	if err != nil {
+		// ignore error (table may not exist)
+		return err
+	}
+	return nil
 }

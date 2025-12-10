@@ -1,35 +1,41 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"os"
+    "fmt"
+    "log"
+    "os"
 
-	"github.com/Lutfania/ekrp/config"
-	"github.com/Lutfania/ekrp/routes"
+    "github.com/Lutfania/ekrp/config"
+    "github.com/Lutfania/ekrp/database"
+    "github.com/Lutfania/ekrp/routes"
 )
 
 func main() {
 
-	err := config.LoadEnv()
-	if err != nil {
-		log.Fatal("❌ Failed to load .env:", err)
-	}
+    // load .env
+    if err := config.LoadEnv(); err != nil {
+        log.Fatal("❌ Failed to load .env:", err)
+    }
 
-	err = config.InitPostgres()
-	if err != nil {
-		log.Fatal("❌ Failed to connect database:", err)
-	}
+    // connect PostgreSQL
+    if err := config.InitPostgres(); err != nil {
+        log.Fatal("❌ Failed to connect PostgreSQL:", err)
+    }
 
-	app := config.NewApp()
+    // connect MongoDB (WAJIB!)
+    if err := database.InitMongo(); err != nil {
+        log.Fatal("❌ Failed to connect MongoDB:", err)
+    }
 
-	routes.RegisterRoutes(app)
+    app := config.NewApp()
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+    routes.RegisterRoutes(app)
 
-	fmt.Println("🚀 Server running at http://localhost:" + port)
-	log.Fatal(app.Listen(":" + port))
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
+
+    fmt.Println("🚀 Server running at http://localhost:" + port)
+    log.Fatal(app.Listen(":" + port))
 }
