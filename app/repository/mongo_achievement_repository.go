@@ -50,10 +50,12 @@ func (r *MongoAchievementRepository) UpdateByHex(hexID string, update bson.M) er
 	if err != nil {
 		return err
 	}
+
 	coll := database.Collection("achievements")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err = coll.UpdateByID(ctx, oid, bson.M{"$set": update})
+
+	_, err = coll.UpdateByID(ctx, oid, update) // ⬅️ PENTING
 	return err
 }
 
